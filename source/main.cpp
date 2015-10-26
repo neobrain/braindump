@@ -8,10 +8,52 @@
 #include <iterator>
 #include <sstream>
 #include <vector>
+#include <inttypes.h>
+
+#include <sys/stat.h>
+#include <errno.h>
 
 #include <3ds.h>
 
 #include "ncch.h"
+
+class WriteResult {
+    Result res;
+
+public:
+    WriteResult(Result res) : res(res) {}
+	friend std::ostream& operator<<(std::ostream& os, const WriteResult& result);
+};
+
+std::ostream& operator<<(std::ostream& os, const WriteResult& result) {
+    std::ios::fmtflags f( os.flags() );
+    os << std::hex << std::showbase << std::setw(10) << std::setfill('0') << result.res;
+    os.flags(f);
+    return os;
+}
+
+std::string ResultToString(Result res) {
+    std::stringstream ss;
+    ss << WriteResult(res);
+    return ss.str();
+}
+
+static Result
+MYFSUSER_GetMediaType(Handle fsuHandle, u8* mediatype)
+{
+    u32* cmdbuf = getThreadCommandBuffer();
+
+    cmdbuf[0] = IPC_MakeHeader(0x868,0,0); // 0x8680000
+
+    Result ret = 0;
+    if((ret = svcSendSyncRequest(fsuHandle)))
+        return ret;
+
+    if(mediatype)
+        *mediatype = cmdbuf[2];
+
+    return cmdbuf[1];
+}
 
 static Result GetTitleInformation(u8* mediatype, uint64_t* tid)
 {
@@ -22,13 +64,15 @@ static Result GetTitleInformation(u8* mediatype, uint64_t* tid)
         Handle localFsHandle;
 
         // Create temporary FS handle to get the proper media type
-        ret = srvGetServiceHandle(&localFsHandle, "fs:USER");
+        ret = srvGetServiceHandleDirect(&localFsHandle, "fs:USER");
         if(ret)return ret;
 
         ret = FSUSER_Initialize(localFsHandle);
         if(ret)return ret;
 
-        ret = FSUSER_GetMediaType(mediatype);
+        ret = MYFSUSER_GetMediaType(localFsHandle, mediatype);
+        if (ret != 0)
+            printf("FSUSER_GetMediaType error: %x\n", ResultToString(ret).c_str());
 
         svcCloseHandle(localFsHandle);
     }
@@ -37,31 +81,12 @@ static Result GetTitleInformation(u8* mediatype, uint64_t* tid)
     {
         aptOpenSession();
         ret = APT_GetProgramID(tid);
+        if (ret != 0)
+            printf("APT_GetProgramID error: %x\n", ResultToString(ret).c_str());
         aptCloseSession();
     }
 
     return ret;
-}
-
-class WriteResult {
-    Result res;
-
-public:
-    WriteResult(Result res) : res(res) {}
-friend std::ostream& operator<<(std::ostream& os, const WriteResult& result);
-std::ostream& operator<<(std::ostream& os) {
-    std::ios::fmtflags f( os.flags() );
-    os << std::hex << std::showbase << std::setw(10) << std::setfill('0') << res;
-    os.flags(f);
-    return os;
-}
-};
-
-std::ostream& operator<<(std::ostream& os, const WriteResult& result) {
-    std::ios::fmtflags f( os.flags() );
-    os << std::hex << std::showbase << std::setw(10) << std::setfill('0') << result.res;
-    os.flags(f);
-    return os;
 }
 
 enum class ContentType : uint32_t {
@@ -73,6 +98,7 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
     uint32_t archivePath[] = { (uint32_t)(title_id & 0xFFFFFFFF), (uint32_t)(title_id >> 32), media_type, 0x00000000};
     FS_path fs_archive_path = { PATH_BINARY, 0x10, (u8*)archivePath };
     FS_archive fs_archive = { 0x2345678a, fs_archive_path };
+
     struct LowPathData {
         uint32_t unk[3];
         std::array<char, 8> filename; // NOTE: Archive 0x2345678a expects this particular size!
@@ -84,22 +110,27 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
     std::copy(name.c_str(), name.c_str() + name.size() + 1, data.filename.begin());
 
     Handle file_handle;
-    Result ret = FSUSER_OpenFileDirectly(&file_handle,
+    Result ret = FSUSER_OpenFileDirectly(//nullptr,
+                                         &file_handle,
                                          fs_archive,
                                          (FS_path) { PATH_BINARY, sizeof(data), (u8*)&data },
                                          FS_OPEN_READ,
                                          FS_ATTRIBUTE_NONE);
+
     if (ret != 0) {
-        std::cout << "Couldn't open \"ExeFS/" + name + "\" for reading (error " << WriteResult(ret) << ")" << std::endl;
+        printf("Couldn't open \"ExeFS/%s\" for reading (error %s)\n", name.c_str(), ResultToString(ret).c_str());
         return {};
     }
 
     uint64_t size;
     ret = FSFILE_GetSize(file_handle, &size);
     if (ret != 0 || !size) {
+        printf("Couldn't get file size for \"ExeFS/%s\" (error %s)\n", name.c_str(), ResultToString(ret).c_str());
         FSFILE_Close(file_handle);
-//        throw std::runtime_error("Couldn't get file size of \"ExeFS/" + name + "\" (error " + ResultToString(ret) + ")");
         return {};
+    } else {
+        printf("%" PRIu64 " KiB... ", size / 1024);
+        fflush(stdout);
     }
 
     std::vector<uint8_t> content(size);
@@ -107,12 +138,13 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
     uint32_t bytes_read;
     ret = FSFILE_Read(file_handle, &bytes_read, 0, content.data(), size);
     if (ret != 0 || bytes_read != size) {
+        printf("Expected to read %" PRIu64 " bytes, read %" PRIu32 "\n", size, bytes_read);
         FSFILE_Close(file_handle);
-//        throw std::runtime_error("Couldn't read \"ExeFS/" + name + "\" (error " + ResultToString(ret) + ")");
         return {};
     } else {
     }
 
+    FSFILE_Close(file_handle);
     return content;
 }
 
@@ -152,12 +184,13 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
     uint32_t size_decompressed_code;
 
     {
-        std::cout << "\tDumping code.bin... " << std::flush;
+        printf("\tDumping code... ");
+        fflush(stdout);
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, ".code");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, ".code", exefs_file, exefs_header_end);
-        std::cout << "done!" << std::endl;
+        printf("done!\n");
 
         u8* size_diff_ptr = &contents[contents.size() - 4];
         u32 size_diff = size_diff_ptr[0] | (size_diff_ptr[1] << 8) | (size_diff_ptr[2] << 16) | (size_diff_ptr[3] << 24);
@@ -165,31 +198,35 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
     }
 
     {
-        std::cout << "\tDumping banner.bin... " << std::flush;
+        printf("\tDumping banner... ");
+        fflush(stdout);
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "banner");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "banner", exefs_file, exefs_header_end);
-        std::cout << "done!" << std::endl;
+        printf("done!\n");
     }
 
     {
-        std::cout << "\tDumping icon.bin..." << std::flush;
+        printf("\tDumping icon... ");
+        fflush(stdout);
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "icon");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "icon", exefs_file, exefs_header_end);
-        std::cout << "done!" << std::endl;
+        printf("done!\n");
     }
 
     {
-        std::cout << "\tDumping logo.bin... " << std::flush;
+        printf("\tDumping logo... ");
+        fflush(stdout);
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "logo");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "logo", exefs_file, exefs_header_end);
-        std::cout << "done!" << std::endl;
+        printf("done!\n");
     }
+
     // Seek back and write ExeFS header
     auto end_pos = exefs_file.tellp();
     exefs_file.seekp(exefs_header_begin);
@@ -200,32 +237,165 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
     return size_decompressed_code;
 }
 
-int main() {
+static Result
+MYFSUSER_OpenFileDirectly(Handle fsuHandle,
+                        Handle     *out,
+                        FS_archive archive,
+                        FS_path    fileLowPath,
+                        u32        openFlags,
+                        u32        attributes) noexcept
+{
+    u32 *cmdbuf = getThreadCommandBuffer();
+
+    cmdbuf[ 0] = IPC_MakeHeader(0x803,8,4); // 0x8030204
+    cmdbuf[ 1] = 0;
+    cmdbuf[ 2] = archive.id;
+    cmdbuf[ 3] = archive.lowPath.type;
+    cmdbuf[ 4] = archive.lowPath.size;
+    cmdbuf[ 5] = fileLowPath.type;
+    cmdbuf[ 6] = fileLowPath.size;
+    cmdbuf[ 7] = openFlags;
+    cmdbuf[ 8] = attributes;
+    cmdbuf[ 9] = IPC_Desc_StaticBuffer(archive.lowPath.size,2);
+    cmdbuf[10] = (u32)archive.lowPath.data;
+    cmdbuf[11] = IPC_Desc_StaticBuffer(fileLowPath.size,0);
+    cmdbuf[12] = (u32)fileLowPath.data;
+
+    Result ret = 0;
+    if((ret = svcSendSyncRequest(fsuHandle)))
+        return ret;
+
+    if(out)
+        *out = cmdbuf[3];
+
+    return cmdbuf[1];
+}
+
+static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediatype) {
+    bool success = false;
+
+    // Write the magic word and some padding bytes to act as a dummy info block
+    out_file.write("IVFC", 4);
+    std::generate_n(std::ostream_iterator<uint8_t>(out_file), 0xFFC, []{return 0;});
+
+    char arch_path[] = "";
+    FS_path fs_archive_path = FS_path{ PATH_EMPTY, 1, (u8*)arch_path };
+    FS_archive fs_archive = { ARCH_ROMFS, fs_archive_path };
+    char low_path[0xc];
+    memset(low_path, 0, sizeof(low_path));
+
+    Handle local_fs_handle;
+    Result ret = srvGetServiceHandleDirect(&local_fs_handle, "fs:USER");
+    if (ret != 0) {
+        printf("Failed to get fs:USER handle (error %s)\n", ResultToString(ret).c_str());
+        return success;
+    }
+
+
+    ret = FSUSER_Initialize(local_fs_handle);
+    Handle file_handle;
+    if (ret != 0) {
+        printf("Failed to initialize fs:USER handle (error %s)\n", ResultToString(ret).c_str());
+        goto cleanup2;
+    }
+
+    ret = MYFSUSER_OpenFileDirectly(local_fs_handle,
+                                    &file_handle,
+                                    fs_archive,
+                                    (FS_path) { PATH_BINARY, sizeof(low_path), (u8*)low_path },
+                                    FS_OPEN_READ,
+                                    FS_ATTRIBUTE_NONE);
+
+    if (ret != 0) {
+        printf("Couldn't open RomFS for reading (error %s)\n", ResultToString(ret).c_str());
+        goto cleanup2;
+    }
+
+    {
+    uint64_t size;
+    uint64_t offset = 0;
+    ret = FSFILE_GetSize(file_handle, &size);
+    if (ret != 0 || !size) {
+        printf("Couldn't get RomFS size (error %s)\n", ResultToString(ret).c_str());
+        goto cleanup;
+    }
+
+    while (offset != size) {
+        static std::array<char, 1024> read_buffer;
+        uint32_t bytes_read;
+
+        ret = FSFILE_Read(file_handle, &bytes_read, offset, read_buffer.data(), sizeof(read_buffer));
+        if (ret != 0 || bytes_read == 0) {
+            printf("Error while reading RomFS (error %s)\n", ResultToString(ret).c_str());
+            goto cleanup;
+        }
+        out_file.write(read_buffer.data(), bytes_read);
+        if (!out_file.good()) {
+            printf("Error while writing output... is your SD card full?\n");
+            goto cleanup;
+        }
+        offset += bytes_read;
+
+        printf("\rDumping RomFS... %" PRIu64 "/%" PRIu64 " KiB... ", offset / 1024, size / 1024);
+        fflush(stdout);
+    }
+    success = true;
+
+    }
+
+
+cleanup:
+    FSFILE_Close(file_handle);
+
+cleanup2:
+    svcCloseHandle(local_fs_handle);
+
+    return success;
+}
+
+int main(int argc, char **argv) {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
+
+    printf("Hi! Welcome to braindump <3\n\n");
 
     uint64_t title_id;
     uint8_t mediatype;
     GetTitleInformation(&mediatype, &title_id);
-    std::cout << "Title ID: " << std::hex << std::setw(18) << std::setfill('0') << std::showbase << title_id << std::endl;
+    printf("Title ID: 0x%016" PRIx64 ", media type %" PRIx8 "\n", title_id, mediatype);
 
     std::stringstream filename_ss;
     filename_ss << "sdmc:/" << std::hex << std::setw(16) << std::setfill('0') << title_id << "/";
-    std::cout << "Dumping to \"" << filename_ss.str() << "\"" << std::endl;
+    printf("Dumping to \"%s\"\n", filename_ss.str().c_str());
 
-    bool success = 0;
+    int ret2 = mkdir(filename_ss.str().c_str(), 0755);
+    if (ret2 != 0 && ret2 != EEXIST) {
+        // TODO: Error
+    }
+
+
+    bool success = true;
 
     {
-        std::cout << "Dumping ExeFS..." << std::endl;
+        printf("Dumping ExeFS...\n");
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "exefs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
-        success = (0 != DumpExeFS(out_file, title_id, mediatype));
+        success &= (0 != DumpExeFS(out_file, title_id, mediatype));
+    }
+
+    {
+        printf("Dumping RomFS...");
+        fflush(stdout);
+        std::ofstream out_file;
+        out_file.open(filename_ss.str() + "romfs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+        success &= DumpRomFS(out_file, title_id, mediatype);
+        printf(" done!\n");
     }
 
     if (success)
-        std::cout << "Done! Press Start to exit." << std::endl;
+        printf("\nDone! Thanks for being awesome!\nPress Start to exit.\n");
     else
-        std::cout << "Failure during dumping. Output data is incomplete!" << std::endl;
+        printf("\nFailure during dumping. Output data is incomplete!\n");
 
     while (aptMainLoop())
     {
