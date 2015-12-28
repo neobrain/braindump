@@ -17,6 +17,14 @@
 
 #include "ncch.h"
 
+// Utility function to convert a value to a fixed-width string of (sizeof(T)*2+2) digits, e.g. "0x1234" for a uint16_t argument.
+template<typename T>
+std::string fixed_width_hex(T value) {
+    std::stringstream ss;
+    ss << std::showbase << std::hex << std::setw(2+sizeof(T)*2) << std::setfill('0') << value;
+    return ss.str();
+}
+
 class WriteResult {
     Result res;
 
@@ -27,7 +35,7 @@ public:
 
 std::ostream& operator<<(std::ostream& os, const WriteResult& result) {
     std::ios::fmtflags f( os.flags() );
-    os << std::hex << std::showbase << std::setw(10) << std::setfill('0') << result.res;
+    os << std::hex << fixed_width_hex(result.res);
     os.flags(f);
     return os;
 }
@@ -72,7 +80,7 @@ static Result GetTitleInformation(u8* mediatype, uint64_t* tid)
 
         ret = MYFSUSER_GetMediaType(localFsHandle, mediatype);
         if (ret != 0)
-            printf("FSUSER_GetMediaType error: %x\n", ResultToString(ret).c_str());
+            std::cout << "FSUSER_GetMediaType error: " << ResultToString(ret) << std::endl;
 
         svcCloseHandle(localFsHandle);
     }
@@ -82,7 +90,7 @@ static Result GetTitleInformation(u8* mediatype, uint64_t* tid)
         aptOpenSession();
         ret = APT_GetProgramID(tid);
         if (ret != 0)
-            printf("APT_GetProgramID error: %x\n", ResultToString(ret).c_str());
+            std::cout << "APT_GetProgramID error: " << ResultToString(ret) << std::endl;
         aptCloseSession();
     }
 
@@ -118,19 +126,18 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
                                          FS_ATTRIBUTE_NONE);
 
     if (ret != 0) {
-        printf("Couldn't open \"ExeFS/%s\" for reading (error %s)\n", name.c_str(), ResultToString(ret).c_str());
+        std::cout << "Couldn't open \"ExeFS/" << name << "\" for reading (error " << ResultToString(ret) << ")" << std::endl;
         return {};
     }
 
     uint64_t size;
     ret = FSFILE_GetSize(file_handle, &size);
     if (ret != 0 || !size) {
-        printf("Couldn't get file size for \"ExeFS/%s\" (error %s)\n", name.c_str(), ResultToString(ret).c_str());
+        std::cout << "Couldn't get file size for \"ExeFS/" << name << "\" (error " << ResultToString(ret) << ")" << std::endl;
         FSFILE_Close(file_handle);
         return {};
     } else {
-        printf("%" PRIu64 " KiB... ", size / 1024);
-        fflush(stdout);
+        std::cout << (size / 1024) << " KiB... " << std::flush;
     }
 
     std::vector<uint8_t> content(size);
@@ -138,7 +145,7 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
     uint32_t bytes_read;
     ret = FSFILE_Read(file_handle, &bytes_read, 0, content.data(), size);
     if (ret != 0 || bytes_read != size) {
-        printf("Expected to read %" PRIu64 " bytes, read %" PRIu32 "\n", size, bytes_read);
+        std::cout << "Expected to read " << size << " bytes, read" << bytes_read << std::endl;
         FSFILE_Close(file_handle);
         return {};
     } else {
@@ -184,13 +191,12 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
     uint32_t size_decompressed_code;
 
     {
-        printf("\tDumping code... ");
-        fflush(stdout);
+        std::cout << "\tDumping code... " << std::flush;
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, ".code");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, ".code", exefs_file, exefs_header_end);
-        printf("done!\n");
+        std::cout << "done!" << std::endl;
 
         u8* size_diff_ptr = &contents[contents.size() - 4];
         u32 size_diff = size_diff_ptr[0] | (size_diff_ptr[1] << 8) | (size_diff_ptr[2] << 16) | (size_diff_ptr[3] << 24);
@@ -198,33 +204,30 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
     }
 
     {
-        printf("\tDumping banner... ");
-        fflush(stdout);
+        std::cout << "\tDumping banner... " << std::flush;
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "banner");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "banner", exefs_file, exefs_header_end);
-        printf("done!\n");
+        std::cout << "done!" << std::endl;
     }
 
     {
-        printf("\tDumping icon... ");
-        fflush(stdout);
+        std::cout << "\tDumping icon... " << std::flush;
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "icon");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "icon", exefs_file, exefs_header_end);
-        printf("done!\n");
+        std::cout << "done!" << std::endl;
     }
 
     {
-        printf("\tDumping logo... ");
-        fflush(stdout);
+        std::cout << "\tDumping logo... " << std::flush;
         auto contents = ReadTitleContent(title_id, mediatype, ContentType::EXEFS, "logo");
         if (contents.empty())
             return 0;
         *exefs_section_header_it++ = WriteSection(contents, "logo", exefs_file, exefs_header_end);
-        printf("done!\n");
+        std::cout << "done!" << std::endl;
     }
 
     // Seek back and write ExeFS header
@@ -287,7 +290,7 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
     Handle local_fs_handle;
     Result ret = srvGetServiceHandleDirect(&local_fs_handle, "fs:USER");
     if (ret != 0) {
-        printf("Failed to get fs:USER handle (error %s)\n", ResultToString(ret).c_str());
+        std::cout << "Failed to get fs:USER handle (error " << ResultToString(ret) << ")" << std::endl;
         return success;
     }
 
@@ -295,7 +298,7 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
     ret = FSUSER_Initialize(local_fs_handle);
     Handle file_handle;
     if (ret != 0) {
-        printf("Failed to initialize fs:USER handle (error %s)\n", ResultToString(ret).c_str());
+        std::cout << "Failed to initialize fs:USER handle (error " << ResultToString(ret) << ")" << std::endl;
         goto cleanup2;
     }
 
@@ -307,7 +310,7 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
                                     FS_ATTRIBUTE_NONE);
 
     if (ret != 0) {
-        printf("Couldn't open RomFS for reading (error %s)\n", ResultToString(ret).c_str());
+        std::cout << "Couldn't open RomFS for reading (error " << ResultToString(ret) << ")" << std::endl;
         goto cleanup2;
     }
 
@@ -316,7 +319,7 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
     uint64_t offset = 0;
     ret = FSFILE_GetSize(file_handle, &size);
     if (ret != 0 || !size) {
-        printf("Couldn't get RomFS size (error %s)\n", ResultToString(ret).c_str());
+        std::cout << "Couldn't get RomFS size (error " << ResultToString(ret) << ")" << std::endl;
         goto cleanup;
     }
 
@@ -326,18 +329,17 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
 
         ret = FSFILE_Read(file_handle, &bytes_read, offset, read_buffer.data(), read_buffer.size() * sizeof(read_buffer[0]));
         if (ret != 0 || bytes_read == 0) {
-            printf("Error while reading RomFS (error %s)\n", ResultToString(ret).c_str());
+            std::cout << "Error while reading RomFS (error " << ResultToString(ret) << ")" << std::endl;
             goto cleanup;
         }
         out_file.write(read_buffer.data(), bytes_read);
         if (!out_file.good()) {
-            printf("Error while writing output... is your SD card full?\n");
+            std::cout << "Error while writing output... is your SD card full?" << std::endl;
             goto cleanup;
         }
         offset += bytes_read;
 
-        printf("\rDumping RomFS... %" PRIu64 "/%" PRIu64 " KiB... ", offset / 1024, size / 1024);
-        fflush(stdout);
+        std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
     }
     success = true;
 
@@ -357,16 +359,16 @@ int main(int argc, char **argv) {
     gfxInitDefault();
     consoleInit(GFX_TOP, NULL);
 
-    printf("Hi! Welcome to braindump <3\n\n");
+    std::cout << "Hi! Welcome to braindump <3" << std::endl << std::endl;
 
     uint64_t title_id;
     uint8_t mediatype;
     GetTitleInformation(&mediatype, &title_id);
-    printf("Title ID: 0x%016" PRIx64 ", media type %" PRIx8 "\n", title_id, mediatype);
+    std::cout << "Title ID: " << fixed_width_hex(title_id) << ", media type " << fixed_width_hex(mediatype) << std::endl;
 
     std::stringstream filename_ss;
     filename_ss << "sdmc:/" << std::hex << std::setw(16) << std::setfill('0') << title_id << "/";
-    printf("Dumping to \"%s\"\n", filename_ss.str().c_str());
+    std::cout << "Dumping to \"" << filename_ss << "\"" << std::endl;
 
     int ret2 = mkdir(filename_ss.str().c_str(), 0755);
     if (ret2 != 0 && ret2 != EEXIST) {
@@ -377,25 +379,24 @@ int main(int argc, char **argv) {
     bool success = true;
 
     {
-        printf("Dumping ExeFS... be patient!\n");
+        std::cout << "Dumping ExeFS... be patient!" << std::endl;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "exefs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
         success &= (0 != DumpExeFS(out_file, title_id, mediatype));
     }
 
     {
-        printf("Dumping RomFS...");
-        fflush(stdout);
+        std::cout << "Dumping RomFS..." << std::flush;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "romfs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
         success &= DumpRomFS(out_file, title_id, mediatype);
-        printf(" done!\n");
+        std::cout << " done!" << std::endl;
     }
 
     if (success)
-        printf("\nDone! Thanks for being awesome!\nPress Start to exit.\n");
+        std::cout << std::endl << "Done! Thanks for being awesome!" << std::endl << "Press Start to exit." << std::endl;
     else
-        printf("\nFailure during dumping. Output data is incomplete!\n");
+        std::cout << std::endl << "Failure during dumping. Output data is incomplete!" << std::endl;
 
     while (aptMainLoop())
     {
