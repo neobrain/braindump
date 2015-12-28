@@ -320,11 +320,11 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
         goto cleanup;
     }
 
+    std::vector<char> read_buffer(1024*1024);
     while (offset != size) {
-        static std::array<char, 1024> read_buffer;
         uint32_t bytes_read;
 
-        ret = FSFILE_Read(file_handle, &bytes_read, offset, read_buffer.data(), sizeof(read_buffer));
+        ret = FSFILE_Read(file_handle, &bytes_read, offset, read_buffer.data(), read_buffer.size() * sizeof(read_buffer[0]));
         if (ret != 0 || bytes_read == 0) {
             printf("Error while reading RomFS (error %s)\n", ResultToString(ret).c_str());
             goto cleanup;
@@ -377,7 +377,7 @@ int main(int argc, char **argv) {
     bool success = true;
 
     {
-        printf("Dumping ExeFS...\n");
+        printf("Dumping ExeFS... be patient!\n");
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "exefs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
         success &= (0 != DumpExeFS(out_file, title_id, mediatype));
