@@ -34,7 +34,7 @@ At this stage, I cannot give you full instructions on how to mod a game, but her
 
 * Launching
 * Dumping the game contents using braindump on your 3DS. This will place the file `<titleid>.cxi` on your SD card.
-* To extract the game content you have to extract the ExeFS and the RomFS. You can do this on a PC using [ctrtool](https://github.com/profi200/Project_CTR) with the commands `ctrtool --exefsdir=exefs --decompresscode <titleid>.cxi` and `ctrtool --romfs=romfs.bin --decompresscode <titleid>.cxi; ctrtool --romfsdir=romfs --intype=romfs romfs.bin`, respectively.
+* To extract the game content you have to extract the ExeFS and the RomFS. You can do this on a PC using [ctrtool](https://github.com/profi200/Project_CTR) with the commands `ctrtool --exefs=exefs.bin --decompresscode <titleid>.cxi` and `ctrtool --romfs=romfs.bin --decompresscode <titleid>.cxi; ctrtool --romfsdir=romfs --intype=romfs romfs.bin`, respectively.
 * Game modders will be interested in the contents extracted to romfsdir. Modify whatever you like, and repack the contents using a tool like [3dstool](https://github.com/dnasdw/3dstool).
 * Put the new romfs binary on your SD card. Start HANS on your 3DS and point it to the modded game, and make it replace the romfs with your new image.
 
