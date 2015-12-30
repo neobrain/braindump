@@ -422,6 +422,7 @@ int main(int argc, char **argv) {
     Result ret = GetTitleInformation(&mediatype, &title_id);
     if (ret != 0) {
         // TODO: Error
+        std::cout << "Failed to obtain information about the currently running title!" << std::endl;
         return 1;
     }
     std::cout << "Title ID: " << fixed_width_hex(title_id) << ", media type " << fixed_width_hex(mediatype) << std::endl;
@@ -430,16 +431,15 @@ int main(int argc, char **argv) {
     filename_ss << "sdmc:/" << std::hex << std::setw(16) << std::setfill('0') << title_id;
     std::cout << "Dumping to \"" << filename_ss.str() << "\"" << std::endl;
 
-    int ret2 = mkdir(filename_ss.str().c_str(), 0755);
-    if (ret2 != 0 && ret2 != EEXIST) {
-        // TODO: Error
-    }
-
-
     bool success = true;
 
     // Dump a copy of FCRAM
     if (dump_fcram) {
+        int ret2 = mkdir(filename_ss.str().c_str(), 0755);
+        if (ret2 != 0 && ret2 != EEXIST) {
+            // TODO: Error
+        }
+
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/fcram.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
 
@@ -460,6 +460,11 @@ int main(int argc, char **argv) {
 
     // Dump ExeFS to its own file
     if (dump_standalone_exefs) {
+        int ret2 = mkdir(filename_ss.str().c_str(), 0755);
+        if (ret2 != 0 && ret2 != EEXIST) {
+            // TODO: Error
+        }
+
         std::cout << "Dumping ExeFS... be patient!" << std::endl;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/exefs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
@@ -469,6 +474,11 @@ int main(int argc, char **argv) {
 
     // Dump RomFS to its own file
     if (dump_standalone_romfs) {
+        int ret2 = mkdir(filename_ss.str().c_str(), 0755);
+        if (ret2 != 0 && ret2 != EEXIST) {
+            // TODO: Error
+        }
+
         std::cout << "Dumping RomFS..." << std::flush;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/romfs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
