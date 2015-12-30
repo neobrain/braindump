@@ -429,7 +429,6 @@ int main(int argc, char **argv) {
 
     std::stringstream filename_ss;
     filename_ss << "sdmc:/" << std::hex << std::setw(16) << std::setfill('0') << title_id;
-    std::cout << "Dumping to \"" << filename_ss.str() << "\"" << std::endl;
 
     bool success = true;
 
@@ -442,6 +441,7 @@ int main(int argc, char **argv) {
 
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/fcram.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+        std::cout << "Dumping FCRAM to \"" << filename_ss.str() << "/fcram.bin\"" << std::endl;
 
         uint8_t* buf = (uint8_t*)linearAlloc(0x10000);
         for (uint8_t* src = (uint8_t*)0x14000000; src < (uint8_t*)(0x14000000 + 0x06800000); src += 0x10000) {
@@ -465,7 +465,8 @@ int main(int argc, char **argv) {
             // TODO: Error
         }
 
-        std::cout << "Dumping ExeFS... be patient!" << std::endl;
+        std::cout << "Dumping ExeFS to \"" << filename_ss.str() << "/exefs.bin\"" << std::endl;
+        std::cout << "Please be patient, this may take a few minutes!" << std::endl;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/exefs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
         success &= (0 != DumpExeFS(out_file, title_id, mediatype));
@@ -479,7 +480,7 @@ int main(int argc, char **argv) {
             // TODO: Error
         }
 
-        std::cout << "Dumping RomFS..." << std::flush;
+        std::cout << "Dumping RomFS to \"" << filename_ss.str() << "/romfs.bin\"" << std::endl;
         std::ofstream out_file;
         out_file.open(filename_ss.str() + "/romfs.bin", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
         success &= DumpRomFS(out_file, title_id, mediatype);
@@ -490,6 +491,7 @@ int main(int argc, char **argv) {
     if (dump_full_image) {
         std::ofstream out_file;
         out_file.open(filename_ss.str() + ".cxi", std::ios_base::binary | std::ios_base::out | std::ios_base::trunc);
+        std::cout << "Dumping title to \"" << filename_ss.str() << ".cxi\"" << std::endl;
 
         // Write placeholder headers to be filled later
         auto ncch_pos = out_file.tellp();
@@ -501,7 +503,8 @@ int main(int argc, char **argv) {
         PadToNextMediaUnit(out_file, ncch_pos);
 
         // Dump ExeFS and RomFS first (since their sizes are needed to generate the ExHeader)
-        std::cout << "Dumping ExeFS... be patient!" << std::endl;
+        std::cout << "Dumping ExeFS..." << std::endl;
+        std::cout << "Please be patient, this may take a few minutes!" << std::endl;
         auto exefs_pos = out_file.tellp();
         auto decompressed_code_size = DumpExeFS(out_file, title_id, mediatype);
         success &= (0 != decompressed_code_size);
