@@ -15,7 +15,7 @@
 
 #include <3ds.h>
 
-#include "ncch.h"
+#include "ncch.h" 
 
 // Utility function to convert a value to a fixed-width string of (sizeof(T)*2+2) digits, e.g. "0x0123" for a uint16_t argument.
 template<typename T>
