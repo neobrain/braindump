@@ -15,7 +15,7 @@
 
 #include <3ds.h>
 
-#include "ncch.h"
+#include "ncch.h" 
 
 // Utility function to convert a value to a fixed-width string of (sizeof(T)*2+2) digits, e.g. "0x0123" for a uint16_t argument.
 template<typename T>
@@ -99,11 +99,9 @@ static Result GetTitleInformation(u8* mediatype, uint64_t* tid) {
     }
 
     if(tid) {
-        aptOpenSession();
         ret = APT_GetProgramID(tid);
         if (ret != 0)
             std::cout << "APT_GetProgramID error: " << ResultToString(ret) << std::endl;
-        aptCloseSession();
     }
 
     return ret;
@@ -117,7 +115,6 @@ enum class ContentType : uint32_t {
 static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_type, ContentType type, const std::string& name) {
     uint32_t archivePath[] = { (uint32_t)(title_id & 0xFFFFFFFF), (uint32_t)(title_id >> 32), media_type, 0x00000000};
     FS_Path fs_archive_path = { PATH_BINARY, 0x10, (u8*)archivePath };
-    FS_Archive fs_archive = { 0x2345678a, fs_archive_path };
 
     struct LowPathData {
         uint32_t unk[3];
@@ -130,12 +127,12 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
     std::copy(name.c_str(), name.c_str() + name.size() + 1, data.filename.begin());
 
     Handle file_handle;
-    Result ret = FSUSER_OpenFileDirectly(//nullptr,
-                                         &file_handle,
-                                         fs_archive,
-                                         (FS_Path) { PATH_BINARY, sizeof(data), (u8*)&data },
-                                         FS_OPEN_READ,
-                                         0);
+    Result ret = FSUSER_OpenFileDirectly(&file_handle,
+                                        (FS_ArchiveID)0x2345678a, 
+										fs_archive_path,
+                                        (FS_Path){ PATH_BINARY, sizeof(data), (u8*)&data },
+                                        FS_OPEN_READ,
+                                        0);
 
     if (ret != 0) {
         std::cout << "Couldn't open \"ExeFS/" << name << "\" for reading (error " << ResultToString(ret) << ")" << std::endl;
@@ -169,7 +166,7 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
 
 static uint32_t RoundUpToMediaUnit(uint32_t value) {
     return (value + 0x1FF) / 0x200 * 0x200;
-}
+} 
 
 static uint32_t BytesToMediaUnits(uint32_t value) {
     return RoundUpToMediaUnit(value) / 0x200;
@@ -264,25 +261,26 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
 static Result
 MYFSUSER_OpenFileDirectly(Handle fsuHandle,
                         Handle     *out,
-                        FS_Archive archive,
-                        FS_Path    fileLowPath,
+                        FS_ArchiveID id,
+                        FS_Path    archivePath,
+                        FS_Path    filePath,
                         u32        openFlags,
                         u32        attributes) noexcept {
     u32 *cmdbuf = getThreadCommandBuffer();
 
     cmdbuf[ 0] = IPC_MakeHeader(0x803,8,4); // 0x8030204
     cmdbuf[ 1] = 0;
-    cmdbuf[ 2] = archive.id;
-    cmdbuf[ 3] = archive.lowPath.type;
-    cmdbuf[ 4] = archive.lowPath.size;
-    cmdbuf[ 5] = fileLowPath.type;
-    cmdbuf[ 6] = fileLowPath.size;
+    cmdbuf[ 2] = id;
+    cmdbuf[ 3] = archivePath.type;
+    cmdbuf[ 4] = archivePath.size;
+    cmdbuf[ 5] = filePath.type;
+    cmdbuf[ 6] = filePath.size;
     cmdbuf[ 7] = openFlags;
     cmdbuf[ 8] = attributes;
-    cmdbuf[ 9] = IPC_Desc_StaticBuffer(archive.lowPath.size,2);
-    cmdbuf[10] = (u32)archive.lowPath.data;
-    cmdbuf[11] = IPC_Desc_StaticBuffer(fileLowPath.size,0);
-    cmdbuf[12] = (u32)fileLowPath.data;
+    cmdbuf[ 9] = IPC_Desc_StaticBuffer(archivePath.size,2);
+    cmdbuf[10] = (u32)archivePath.data;
+    cmdbuf[11] = IPC_Desc_StaticBuffer(filePath.size,0);
+    cmdbuf[12] = (u32)filePath.data;
 
     Result ret = 0;
     if((ret = svcSendSyncRequest(fsuHandle)))
@@ -304,7 +302,6 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
     // Read level 3 partition data
     char arch_path[] = "";
     FS_Path fs_archive_path = FS_Path{ PATH_EMPTY, 1, (u8*)arch_path };
-    FS_Archive fs_archive = { ARCHIVE_ROMFS, fs_archive_path };
     char low_path[0xc];
     memset(low_path, 0, sizeof(low_path));
 
@@ -325,7 +322,8 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
 
     ret = MYFSUSER_OpenFileDirectly(local_fs_handle,
                                     &file_handle,
-                                    fs_archive,
+                                    ARCHIVE_ROMFS,
+									fs_archive_path,
                                     (FS_Path) { PATH_BINARY, sizeof(low_path), (u8*)low_path },
                                     FS_OPEN_READ,
                                     0);
