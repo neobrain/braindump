@@ -128,11 +128,11 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
 
     Handle file_handle;
     Result ret = FSUSER_OpenFileDirectly(&file_handle,
-                                         (FS_ArchiveID)0x2345678a, 
-										 fs_archive_path,
-                                         (FS_Path){ PATH_BINARY, sizeof(data), (u8*)&data },
-                                         FS_OPEN_READ,
-                                         0);
+                                        (FS_ArchiveID)0x2345678a, 
+										fs_archive_path,
+                                        (FS_Path){ PATH_BINARY, sizeof(data), (u8*)&data },
+                                        FS_OPEN_READ,
+                                        0);
 
     if (ret != 0) {
         std::cout << "Couldn't open \"ExeFS/" << name << "\" for reading (error " << ResultToString(ret) << ")" << std::endl;
@@ -260,10 +260,10 @@ static uint32_t DumpExeFS(std::ofstream& exefs_file, uint64_t title_id, uint8_t 
 
 static Result
 MYFSUSER_OpenFileDirectly(Handle fsuHandle,
-						Handle     *out,
+                        Handle     *out,
                         FS_ArchiveID id,
                         FS_Path    archivePath,
-						FS_Path    filePath,
+                        FS_Path    filePath,
                         u32        openFlags,
                         u32        attributes) noexcept {
     u32 *cmdbuf = getThreadCommandBuffer();
