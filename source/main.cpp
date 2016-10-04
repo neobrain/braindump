@@ -166,7 +166,7 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
 
 static uint32_t RoundUpToMediaUnit(uint32_t value) {
     return (value + 0x1FF) / 0x200 * 0x200;
-}
+} 
 
 static uint32_t BytesToMediaUnits(uint32_t value) {
     return RoundUpToMediaUnit(value) / 0x200;
