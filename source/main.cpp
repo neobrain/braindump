@@ -146,7 +146,11 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
         FSFILE_Close(file_handle);
         return {};
     } else {
+		if (size > 1024 ) {
+			std::cout << (size / 1048576) << " MiB... " << std::flush;
+		} else {
         std::cout << (size / 1024) << " KiB... " << std::flush;
+		}
     }
 
     std::vector<uint8_t> content(size);
@@ -357,8 +361,14 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
             goto cleanup;
         }
         offset += bytes_read;
-
-        std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
+	if ( size > 1024) {
+			std::cout << "\rDumping RomFS... " << (offset / 1048576) << "/" << (size / 1048576) << " MiB... " << std::flush;
+			std::cout << "\r" << offset / size << "% done..." << std::flush;
+		}
+		else {	
+			std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
+			std::cout << "\r" << offset / size << "% done..." << std::flush;
+		}
     }
     success = true;
 
