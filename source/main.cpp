@@ -146,10 +146,10 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
         FSFILE_Close(file_handle);
         return {};
     } else {
-		if (size > 1024 ) {
-			std::cout << (size / 1048576) << " MiB... " << std::flush;
+		if (size < 1024 ) {
+			std::cout << (size / 1024) << " KiB... " << std::flush;
 		} else {
-        std::cout << (size / 1024) << " KiB... " << std::flush;
+			std::cout << (size / 1048576) << " MiB... " << std::flush;
 		}
     }
 
@@ -361,13 +361,15 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
             goto cleanup;
         }
         offset += bytes_read;
-	if ( size > 1024) {
-			std::cout << "\rDumping RomFS... " << (offset / 1048576) << "/" << (size / 1048576) << " MiB... " << std::flush;
-			std::cout << "\r" << offset / size << "% done..." << std::flush;
+	// checks if the size is larger than 2 MiB, if so, shows the file size in MiB instead of KiB for easier human readability
+	if ( size > 2048) {
+			std::cout << "\rDumping RomFS... " << (offset / 1048576) << "/" << (size / 1048576) << " MiB... \n" << std::flush;
+			std::cout << "\t" << offset / size * 100 << "% done..." << std::flush;
+			// should multiply the quotient of the offset/size by 100 so it will actually show a number besides 0 during transfer
 		}
 		else {	
-			std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
-			std::cout << "\r" << offset / size << "% done..." << std::flush;
+			std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... \n" << std::flush;
+			std::cout << "\t" << offset / size * 100 << "% done..." << std::flush;
 		}
     }
     success = true;
