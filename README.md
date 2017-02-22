@@ -1,3 +1,5 @@
+Forked from neobrain. See the original project at [https://github.com/neobrain/braindump](https://github.com/neobrain/braindump)
+
 braindump
 =========
 
@@ -7,7 +9,7 @@ The dumps created by braindump are lossy, since not all title information is acc
 
 ## Build Instructions and Setup
 
-You need to have set up a 3DS homebrew[development environment](https://www.3dbrew.org/wiki/Setting_up_Development_Environment) including devkitARM and ctrulib. If you're having trouble building or running braindump, make sure your toolchain is up to date.
+You need to have set up a 3DS homebrew [development environment](https://www.3dbrew.org/wiki/Setting_up_Development_Environment) including devkitARM and ctrulib. If you're having trouble building or running braindump, make sure your toolchain is up to date.
 
 Once you've setup braindump, you can build it by calling
 ```
