@@ -361,11 +361,10 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
 		//uint64_t percent = offset/size * 100;
 		
         // checks if the size is larger than 2 MiB, if so, shows the file size in MiB instead of KiB for easier human readability
-	if ( size > 1024*2) {
-			std::cout << "\rDumping RomFS... " << (offset / 1024*1024) << "/" << (size / 1024*1024) << " MiB... " /* | " << percent << "% done..." */ << std::flush;
+		if ( size > 2048)
+			std::cout << "\rDumping RomFS... " << (offset / 1048576) << "/" << (size / 1048576) << " MiB... " /* | " << percent << "% done..." */ << std::flush;
 			// should multiply the quotient of the offset/size by 100 so it will actually show a number besides 0 during transfer
-		}
-		else {	
+		} else {	
 			std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " /* | " << percent << "% done..." */ << std::flush;
 		}
     }
