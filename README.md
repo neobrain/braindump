@@ -1,5 +1,3 @@
-Forked from neobrain. See the original project at [https://github.com/neobrain/braindump](https://github.com/neobrain/braindump)
-
 braindump
 =========
 
