@@ -146,7 +146,7 @@ static std::vector<uint8_t> ReadTitleContent(uint64_t title_id, uint8_t media_ty
         FSFILE_Close(file_handle);
         return {};
     } else {
-        std::cout << (size / 1024) << " KiB... " << std::flush;
+		std::cout << (size / 1024) << " KiB... " << std::flush;
     }
 
     std::vector<uint8_t> content(size);
@@ -357,8 +357,15 @@ static bool DumpRomFS(std::ofstream& out_file, uint64_t title_id, uint8_t mediat
             goto cleanup;
         }
         offset += bytes_read;
-
-        std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
+        // Below line is be added later to show what percent the backup is at. Tried float, float_t - still doesn't work
+        //uint64_t percent = offset/size * 100;
+		
+        // checks if the size is larger than 2 MiB; if so it shows the file size in MiB instead of KiB for easier human readability
+        if ( size > 2048)
+            std::cout << "\rDumping RomFS... " << (offset / 1048576) << "/" << (size / 1048576) << " MiB... " << std::flush;
+        } else {	
+            std::cout << "\rDumping RomFS... " << (offset / 1024) << "/" << (size / 1024) << " KiB... " << std::flush;
+        }
     }
     success = true;
 
